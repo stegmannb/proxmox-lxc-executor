@@ -6,7 +6,7 @@
   schedule:
     - cron: "10 2 * * 0"
 
-env:
+#env:
 
 jobs:
   pre-commit:
