@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 
-"""A custom GitLab runner executor running inside Proxmox LXC containers
-"""
+"""A custom GitLab runner executor running inside Proxmox LXC containers."""
 
 from __future__ import annotations
 
 import argparse
-
-from collections.abc import Sequence
 import inspect
-from os import path
 import os
 import shutil
-
 import subprocess
 import time
+from collections.abc import Sequence
+from os import path
 
 global PCT_BIN
 global PVEAM_BIN
@@ -40,7 +37,8 @@ def list_online_images(section="system") -> list[str]:
 
 def download_image(storage: str, template: str) -> str:
     subprocess.check_call(
-        [PVEAM_BIN, "download", storage, template], shell=False,
+        [PVEAM_BIN, "download", storage, template],
+        shell=False,
     )
     return f"{storage}:vztmpl/{template}"
 
@@ -133,15 +131,14 @@ def destroy(container_id: int) -> bool:
 
 
 def create(container_id: int, storage: str, image: str):
-    """
-    Creates a new container from an image
+    """Creates a new container from an image.
 
-    If the image is not available locally this function tries to download the image.
+    If the image is not available locally this function tries to
+    download the image.
 
     :param str container_id: Container ID for the new container
     :param str storage: Storage where to find/download the image
     :param str image: Container image to create the container from
-
     """
     print(f"Creating container {container_id}")
     image_path = f"{storage}:vztmpl/{image}"
