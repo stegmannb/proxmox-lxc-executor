@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""A custom GitLab runner executor running inside Proxmox LXC containers."""
+"""Execute GitLab runner jobs inside Proxmox LXC containers"""
 
 from __future__ import annotations
 
