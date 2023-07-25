@@ -86,14 +86,14 @@ def list_lxc() -> list[dict[str, str]]:
         parts = line.split()
         container = {}
         if len(parts) == 3:
-            container.id = parts[0]
-            container.status = parts[1]
-            container.name = parts[2]
+            container["id"] = parts[0]
+            container["status"] = parts[1]
+            container["name"] = parts[2]
         elif len(parts) == 4:
-            container.id = parts[0]
-            container.status = parts[1]
-            container.lock = parts[2]
-            container.name = parts[3]
+            container["id"] = parts[0]
+            container["status"] = parts[1]
+            container["lock"] = parts[2]
+            container["name"] = parts[3]
         else:
             raise Exception(f"Cannot read container information from line: {line}")
         containers.append(container)
@@ -186,7 +186,7 @@ def create(container_id: int, storage: str, image: str):
     # TODO: Add links to the pipeline, job
     # TODO: add information to description
     description = f"GitLab LXC Runner {container_id}"
-    subprocess.check_call(
+    subprocess.run(
         [
             PCT_BIN,
             "create",
@@ -212,6 +212,8 @@ def create(container_id: int, storage: str, image: str):
             "host",
         ],
         shell=False,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -380,12 +382,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         storage = os.getenv("CUSTOM_ENV_storage")
 
     # Image
-    image = "ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
     if args.image:
         image = args.image
     elif not args.no_image_env and os.getenv("CUSTOM_ENV_CI_JOB_IMAGE"):
         image = os.getenv("CUSTOM_ENV_CI_JOB_IMAGE")
     else:
+        image = "ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
         print(f"WARNING: Using default image {image}")
 
     # Commands
