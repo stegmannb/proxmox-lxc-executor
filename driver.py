@@ -75,6 +75,31 @@ def lxc_exists_and_running(container_id: int) -> bool:
         return False
 
 
+def list_lxc() -> list[dict[str, str]]:
+    output = subprocess.check_output(
+        [PCT_BIN, "list"], shell=False, encoding="utf8", text=True
+    )
+    lines = output.splitlines()[1:]
+
+    containers = []
+    for line in lines:
+        parts = line.split()
+        container = {}
+        if len(parts) == 3:
+            container.id = parts[0]
+            container.status = parts[1]
+            container.name = parts[2]
+        elif len(parts) == 4:
+            container.id = parts[0]
+            container.status = parts[1]
+            container.lock = parts[2]
+            container.name = parts[3]
+        else:
+            raise Exception(f"Cannot read container information from line: {line}")
+        containers.append(container)
+    return containers
+
+
 def isolate_service(container_id: int, service: str) -> bool:
     try:
         subprocess.check_call(
@@ -114,6 +139,17 @@ def is_active_service(container_id: int, service: str) -> bool:
         return True
     except subprocess.CalledProcessError:
         return False
+
+
+def destroy_all():
+    containers = list_lxc()
+    for container in containers:
+        if "lxc-runner" in container["name"]:
+            container_id = int(container["id"])
+            if lxc_running(container_id):
+                print(f"Stopping container {container_id}")
+                subprocess.check_call([PCT_BIN, "stop", str(container_id)], shell=False)
+            subprocess.check_call([PCT_BIN, "destroy", str(container_id)], shell=False)
 
 
 def destroy(container_id: int) -> bool:
@@ -269,13 +305,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=["prepare", "cleanup", "run"],
     )
     parser.add_argument("--id", help="Container ID", type=int, required=False)
-    parser.add_argument(
-        "--no-jobid",
-        help="Do not use the Job ID as as the container ID.",
-        type=bool,
-        default=False,
-        required=False,
-    )
 
     parser.add_argument(
         "--storage",
@@ -299,10 +328,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     parser.add_argument(
+        "--all",
+        help="Requires cleanup command. Destroys all lxc runner containers",
+        action=argparse.BooleanOptionalAction,
+    )
+
+    parser.add_argument(
         "options", help="Script to run inside the container", nargs="*", default=[]
     )
 
     args = parser.parse_args(argv)
+
+    if args.all is not None and args.command != "cleanup":
+        print("The all flag only works with the cleanup command.")
+        return 4
 
     global PCT_BIN
     PCT_BIN = shutil.which("pct")
@@ -323,11 +362,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     #     print("{0}: {1}".format(name, value))
 
     # Container ID
-    container_id = 3001
     if args.id:
         container_id = args.id
-    elif not args.no_jobid and os.getenv("CUSTOM_ENV_CI_JOB_ID"):
+    elif os.getenv("CUSTOM_ENV_CI_JOB_ID"):
         container_id = os.getenv("CUSTOM_ENV_CI_JOB_ID")
+    else:
+        print(
+            "You must either provide the --id flag or the CUSTOM_ENV_CI_JOB_ID environment variable!"
+        )
+        return 3
 
     # Storage
     storage = "local"
@@ -342,11 +385,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         image = args.image
     elif not args.no_image_env and os.getenv("CUSTOM_ENV_CI_JOB_IMAGE"):
         image = os.getenv("CUSTOM_ENV_CI_JOB_IMAGE")
+    else:
+        print(f"WARNING: Using default image {image}")
 
     # Commands
-    if args.command == "cleanup":
+    if args.command == "cleanup" and args.all:
+        destroy_all()
+
+    elif args.command == "cleanup":
         destroy(container_id)
-        pass
 
     elif args.command == "prepare":
         destroy(container_id)
