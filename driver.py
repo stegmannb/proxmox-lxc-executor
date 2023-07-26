@@ -9,6 +9,7 @@ import inspect
 import os
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Sequence
 from os import path
@@ -136,6 +137,8 @@ def is_active_service(container_id: int, service: str) -> bool:
                 service,
             ],
             shell=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         return True
     except subprocess.CalledProcessError:
@@ -338,9 +341,12 @@ def provision(container_id: int):
         shell=False,
         text=True,
     )
-    subprocess.check_call(
+    subprocess.run(
         [PCT_BIN, "exec", str(container_id), remote_script],
         shell=False,
+        check=True,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
     )
 
 
