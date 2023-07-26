@@ -21,4 +21,5 @@
 go.work
 
 # JetBrains
-/.idea
+.idea/
+.run/
