@@ -6,6 +6,10 @@ Execute [GitLab runner](https://docs.gitlab.com/runner/) jobs inside [Proxmox](h
 
 TODO
 
+## Configuration
+
+Configuration is none through
+
 ## Commands
 
 ### prepare
