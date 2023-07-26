@@ -3,14 +3,14 @@
 set -euo pipefail
 
 # Detect OS and distribution
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
+if [[ -f "/etc/os-release" ]]; then
+    . "/etc/os-release"
 else
   echo "Provisioning: Could not detect OS"
   exit 1
 fi
 
-if [[ "$ID_LIKE" == "debian" ]]; then
+if [[ "$ID" == "debian" || "${ID_LIKE:-empty}" == "debian" ]]; then
   export DEBIAN_FRONTEND=noninteractive
   arch=$(dpkg --print-architecture)
 
@@ -22,8 +22,33 @@ if [[ "$ID_LIKE" == "debian" ]]; then
 
   curl -L --output /usr/local/bin/gitlab-runner "https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-$arch"
   chmod +x /usr/local/bin/gitlab-runner
+
+elif [[ "$ID" == "arch" || "${ID_LIKE:-empty}" == "arch" ]]; then
+  pacman -Sy --noconfirm --needed curl base-devel git git-lfs
+
+  uname_machine=$(uname --machine)
+  if [[ "x86_64" == "$uname_machine" ]]; then
+    arch="amd64"
+  else
+    arch="$uname_machine"
+  fi
+
+  curl -L --output /usr/local/bin/gitlab-runner "https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-$arch"
+  chmod +x /usr/local/bin/gitlab-runner
+
+elif [[ "$ID" == "fedora" || "$ID" == "almalinux" || "${ID_LIKE:-empty}" == "fedora" ]]; then
+  yum install --assumeyes curl git git-lfs
+
+  uname_machine=$(uname --machine)
+  if [[ "x86_64" == "$uname_machine" ]]; then
+    arch="amd64"
+  else
+    arch="$uname_machine"
+  fi
+
+  curl -L --output /usr/local/bin/gitlab-runner "https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-$arch"
+  chmod +x /usr/local/bin/gitlab-runner
 else
   echo "This distribution is not supported!"
-  echo "ID: ${ID}"
-  echo "ID_LIKE: ${ID_LIKE}"
+  cat "/etc/os-release"
 fi

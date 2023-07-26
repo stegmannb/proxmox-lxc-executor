@@ -15,6 +15,7 @@ from os import path
 
 global PCT_BIN
 global PVEAM_BIN
+CI_ENV_PREFIX = "CUSTOM_ENV_"
 
 
 def list_local_images(storage: str) -> list[str]:
@@ -166,51 +167,124 @@ def destroy(container_id: int) -> bool:
     return True
 
 
-def create(container_id: int, storage: str, image: str):
+def create(
+    container_id: int,
+    image: str,
+    storage: str = "local",
+    image_path: str = "vztmpl",
+    hostname: str | None = None,
+    cores: int | None = None,
+    memory: int | None = None,
+    disk_size: int = 10,
+    password: str | None = None,
+    timezone: str = "host",
+    nesting: bool = True,
+    unprivileged: bool = True,
+):
     """Creates a new container from an image.
 
     If the image is not available locally this function tries to
     download the image.
 
+    :param bool unprivileged: Makes the container run as unprivileged
+        user.
+    :param bool nesting: Allow containers access to advanced features.
+    :param str timezone: Time zone to use in the container. Can be set
+        to "host" to match the host time zone.
+    :param str password: Sets root password inside container.
+    :param str image_path: Path to the image
+    :param str hostname: Set a host name for the container.
+    :param int disk_size: Size of the root volume in GB
+    :param int memory: Amount of RAM for the container in MB.
+    :param int cores: The number of cores assigned to the container. A
+        container can use all available cores by default.
     :param str container_id: Container ID for the new container
     :param str storage: Storage where to find/download the image
     :param str image: Container image to create the container from
     """
-    print(f"Creating container {container_id}")
-    image_path = f"{storage}:vztmpl/{image}"
 
+    image_path = f"{storage}:{image_path}/{image}"
     images = list_local_images(storage)
     if image_path not in images:
         download_image(storage, image)
 
-    # TODO: Add links to the pipeline, job
-    # TODO: add information to description
-    description = f"GitLab LXC Runner {container_id}"
+    print(f"Creating container {container_id}:")
+
+    print(f"       Image:       {image}")
+
+    cmd = [
+        PCT_BIN,
+        "create",
+        str(container_id),
+        image_path,
+        "--net0",
+        "name=eth0,bridge=vmbr0,ip=dhcp",
+    ]
+
+    description = f"GitLab LXC Runner {container_id}\n"
+    if os.getenv(CI_ENV_PREFIX + "CI_PIPELINE_URL"):
+        description = (
+            description
+            + "[Project]("
+            + os.getenv(CI_ENV_PREFIX + "CI_PROJECT_URL")
+            + ")\n"
+        )
+    if os.getenv(CI_ENV_PREFIX + "CI_PIPELINE_URL"):
+        description = (
+            description
+            + "[Pipeline]("
+            + os.getenv(CI_ENV_PREFIX + "CI_PIPELINE_URL")
+            + ")\n"
+        )
+    if os.getenv("CI_MERGE_REQUEST_PROJECT_URL"):
+        description = (
+            description
+            + "[Merge request]("
+            + os.getenv("CI_MERGE_REQUEST_PROJECT_URL")
+            + ")\n"
+        )
+    cmd.append("--description")
+    cmd.append(description)
+
+    cmd.append("--hostname")
+    cmd.append(hostname)
+    print(f"       Hostname:    {hostname}")
+
+    if cores is not None:
+        cmd.append("--cores")
+        cmd.append(str(cores))
+        print(f"       Cores:       {cores}")
+
+    if memory is not None:
+        cmd.append("--memory")
+        cmd.append(str(memory))
+        print(f"       Memory:      {memory} MB")
+
+    if disk_size is not None:
+        cmd.append("--rootfs")
+        cmd.append(f"volume=local-zfs:{disk_size}")
+        print(f"       Disk size:   {disk_size} GB")
+
+    if password is not None:
+        cmd.append("--password")
+        cmd.append(password)
+        print(f"       Password:    {password}")
+
+    if timezone is not None:
+        cmd.append("--timezone")
+        cmd.append(timezone)
+        print(f"       Timezone:    {timezone}")
+
+    cmd.append("--features")
+    features = f"nesting={1 if nesting else 0}"
+    cmd.append(features)
+
+    cmd.append("--unprivileged")
+    unprivileged = "1" if unprivileged else "0"
+    cmd.append(unprivileged)
+
     subprocess.run(
-        [
-            PCT_BIN,
-            "create",
-            str(container_id),
-            image_path,
-            "--hostname",
-            f"lxc-runner-{container_id}",
-            "--description",
-            description,
-            "--rootfs",
-            "volume=local-zfs:10",
-            "--memory",
-            "4096",
-            # "--cores",
-            # "2",
-            "--net0",
-            "name=eth0,bridge=vmbr0,ip=dhcp",
-            "--unprivileged",
-            "1",
-            "--features",
-            "nesting=1",
-            "--timezone",
-            "host",
-        ],
+        cmd,
         shell=False,
         capture_output=True,
         text=True,
@@ -292,58 +366,91 @@ def run(container_id: int, script: str, stage: str):
         capture_output=True,
     )
 
-    print(f"Running stage {stage}")
-    subprocess.run([PCT_BIN, "exec", str(container_id), remote_path])
+    print(f"Running {stage} stage")
+    subprocess.check_call([PCT_BIN, "exec", str(container_id), remote_path])
 
 
-# TODO: Cleanup all option
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    # general options
     parser.add_argument(
-        "command",
-        help="Command prepare|cleanup|run",
-        choices=["prepare", "cleanup", "run"],
+        "--id",
+        help="Container ID (default is $CUSTOM_ENV_CI_JOB_ID)",
+        type=int,
+        required=False,
     )
-    parser.add_argument("--id", help="Container ID", type=int, required=False)
 
-    parser.add_argument(
+    subparsers = parser.add_subparsers(title="command", required=True, dest="command")
+
+    # prepare options
+    prepare_parser = subparsers.add_parser(
+        "prepare", help="Create and provision a new container to run a job"
+    )
+    prepare_parser.add_argument(
         "--storage",
         help="Proxmox Storage Bucket",
         type=str,
         default="local",
         required=False,
     )
-
-    parser.add_argument(
+    prepare_parser.add_argument(
         "--image",
         help="Container image to use",
         type=str,
         required=False,
     )
-    parser.add_argument(
+    prepare_parser.add_argument(
         "--no-image-env",
-        help="Don't override the image from environment variable ",
+        help="Don't override the image from environment variable",
+        type=str,
+        required=False,
+    )
+    prepare_parser.add_argument(
+        "--cores",
+        help="The number of cores assigned to the container",
+        type=int,
+        required=False,
+    )
+    prepare_parser.add_argument(
+        "--memory",
+        help="Amount of RAM for the container in MB",
+        type=int,
+        required=False,
+    )
+    prepare_parser.add_argument(
+        "--hostname-prefix",
+        help="Use this prefix for the container",
+        default="lxc-runner-",
+        type=str,
+        required=False,
+    )
+    prepare_parser.add_argument(
+        "--password",
+        help="Sets root password inside container",
         type=str,
         required=False,
     )
 
-    parser.add_argument(
+    # run options
+    run_parser = subparsers.add_parser("run", help="Run a script inside the container")
+    run_parser.add_argument(
+        "script", help="Path to the script to run inside the container"
+    )
+    run_parser.add_argument("stage", help="Name of the stage")
+
+    # cleanup options
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Stop and destroy the container"
+    )
+    cleanup_parser.add_argument(
         "--all",
-        help="Requires cleanup command. Destroys all lxc runner containers",
+        help="Destroys all lxc runner containers",
         action=argparse.BooleanOptionalAction,
     )
 
-    parser.add_argument(
-        "options", help="Script to run inside the container", nargs="*", default=[]
-    )
-
-    args = parser.parse_args(argv)
-
-    if args.all is not None and args.command != "cleanup":
-        print("The all flag only works with the cleanup command.")
-        return 4
+    args: argparse.Namespace = parser.parse_args(argv)
 
     global PCT_BIN
     PCT_BIN = shutil.which("pct")
@@ -357,55 +464,83 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Cannot find the pveam tool!")
         return 3
 
-    # print("args")
-    # print(args)
-    # print("os.env")
-    # for name, value in os.environ.items():
-    #     print("{0}: {1}".format(name, value))
-
-    # Container ID
+    # config container ID
     if args.id:
         container_id = args.id
-    elif os.getenv("CUSTOM_ENV_CI_JOB_ID"):
-        container_id = os.getenv("CUSTOM_ENV_CI_JOB_ID")
+    elif os.getenv(CI_ENV_PREFIX + "CI_JOB_ID"):
+        container_id = os.getenv(CI_ENV_PREFIX + "CI_JOB_ID")
     else:
         print(
             "You must either provide the --id flag or the CUSTOM_ENV_CI_JOB_ID environment variable!"
         )
         return 3
 
-    # Storage
-    storage = "local"
-    if args.storage:
-        storage = args.storage
-    elif not args.no_image_env and os.getenv("CUSTOM_ENV_storage"):
-        storage = os.getenv("CUSTOM_ENV_storage")
-
-    # Image
-    if args.image:
-        image = args.image
-    elif not args.no_image_env and os.getenv("CUSTOM_ENV_CI_JOB_IMAGE"):
-        image = os.getenv("CUSTOM_ENV_CI_JOB_IMAGE")
-    else:
-        image = "ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
-        print(f"WARNING: Using default image {image}")
-
-    # Commands
+    # command cleanup --all
     if args.command == "cleanup" and args.all:
         destroy_all()
 
+    # command cleanup
     elif args.command == "cleanup":
         destroy(container_id)
 
+    # command prepare
     elif args.command == "prepare":
+        # config storage
+        storage = "local"
+        if args.storage:
+            storage = args.storage
+        elif not args.no_image_env and os.getenv(CI_ENV_PREFIX + "runner_storage"):
+            storage = os.getenv(CI_ENV_PREFIX + "runner_storage")
+
+        # config image
+        if args.image:
+            image = args.image
+        elif not args.no_image_env and os.getenv(CI_ENV_PREFIX + "CI_JOB_IMAGE"):
+            image = os.getenv(CI_ENV_PREFIX + "CI_JOB_IMAGE")
+        else:
+            image = "ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
+
+        # config cores
+        if args.cores:
+            cores = args.cores
+        elif os.getenv(CI_ENV_PREFIX + "runner_cores"):
+            cores = os.getenv(CI_ENV_PREFIX + "runner_cores")
+        else:
+            cores = None
+
+        # config memory
+        if args.memory:
+            memory = args.memory
+        elif os.getenv(CI_ENV_PREFIX + "runner_memory"):
+            memory = os.getenv(CI_ENV_PREFIX + "runner_memory")
+        else:
+            memory = None
+
+        # config password
+        if args.password:
+            password = args.memory
+        elif os.getenv(CI_ENV_PREFIX + "runner_password"):
+            password = os.getenv(CI_ENV_PREFIX + "runner_password")
+        else:
+            password = None
+
         destroy(container_id)
-        create(container_id, storage, image)
+        create(
+            container_id,
+            image,
+            storage=storage,
+            hostname=args.hostname_prefix + container_id,
+            cores=cores,
+            memory=memory,
+            password=password,
+        )
         start(container_id, 60)
         provision(container_id)
 
+    # command run
     elif args.command == "run":
-        script = args.options[0]
-        stage = args.options[1]
+        script = args.script
+        stage = args.stage
         run(container_id, script, stage)
 
     else:
