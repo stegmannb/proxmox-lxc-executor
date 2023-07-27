@@ -39,18 +39,19 @@ elif [[ "$ID" == "arch" || "${ID_LIKE:-empty}" == "arch" ]]; then
   curl -L --output /usr/local/bin/gitlab-runner "https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-$arch"
   chmod +x /usr/local/bin/gitlab-runner
 
-elif [[ "$ID" == "fedora" || "$ID" == "almalinux" || "${ID_LIKE:-empty}" == "fedora" ]]; then
-  yum install --assumeyes curl git git-lfs
-
-  uname_machine=$(uname --machine)
-  if [[ "x86_64" == "$uname_machine" ]]; then
-    arch="amd64"
-  else
-    arch="$uname_machine"
-  fi
-
-  curl -L --output /usr/local/bin/gitlab-runner "https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-$arch"
-  chmod +x /usr/local/bin/gitlab-runner
+# TODO: provisioning doe snot work on fedora for some reason
+#elif [[ "$ID" == "fedora" || "$ID" == "almalinux" || "${ID_LIKE:-empty}" == "fedora" ]]; then
+#  yum install -y curl git git-lfs
+#
+#  uname_machine=$(uname --machine)
+#  if [[ "x86_64" == "$uname_machine" ]]; then
+#    arch="amd64"
+#  else
+#    arch="$uname_machine"
+#  fi
+#
+#  curl -L --output /usr/local/bin/gitlab-runner "https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-$arch"
+#  chmod +x /usr/local/bin/gitlab-runner
 else
   echo "This distribution is not supported!"
   cat "/etc/os-release"
