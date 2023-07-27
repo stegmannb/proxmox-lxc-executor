@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import logging
 import os
 import shutil
 import subprocess
@@ -151,7 +152,7 @@ def destroy_all():
         if "lxc-runner" in container["name"]:
             container_id = int(container["id"])
             if lxc_running(container_id):
-                print(f"Stopping container {container_id}")
+                logging.info(f"Stopping container {container_id}")
                 subprocess.check_call([PCT_BIN, "stop", str(container_id)], shell=False)
             subprocess.check_call([PCT_BIN, "destroy", str(container_id)], shell=False)
 
@@ -161,10 +162,10 @@ def destroy(container_id: int) -> bool:
         return False
 
     if lxc_running(container_id):
-        print(f"Stopping container {container_id}")
+        logging.info(f"Stopping container {container_id}")
         subprocess.check_call([PCT_BIN, "stop", str(container_id)], shell=False)
 
-    print(f"Destroying container {container_id}")
+    logging.info(f"Destroying container {container_id}")
     subprocess.check_call([PCT_BIN, "destroy", str(container_id)], shell=False)
 
     return True
@@ -211,9 +212,9 @@ def create(
     if image_path not in images:
         download_image(storage, image)
 
-    print(f"Creating container {container_id}:")
+    logging.info(f"Creating container {container_id}:")
 
-    print(f"       Image:       {image}")
+    logging.info(f"       Image:       {image}")
 
     cmd = [
         PCT_BIN,
@@ -251,32 +252,32 @@ def create(
 
     cmd.append("--hostname")
     cmd.append(hostname)
-    print(f"       Hostname:    {hostname}")
+    logging.info(f"       Hostname:    {hostname}")
 
     if cores is not None:
         cmd.append("--cores")
         cmd.append(str(cores))
-        print(f"       Cores:       {cores}")
+        logging.info(f"       Cores:       {cores}")
 
     if memory is not None:
         cmd.append("--memory")
         cmd.append(str(memory))
-        print(f"       Memory:      {memory} MB")
+        logging.info(f"       Memory:      {memory} MB")
 
     if disk_size is not None:
         cmd.append("--rootfs")
         cmd.append(f"volume=local-zfs:{disk_size}")
-        print(f"       Disk size:   {disk_size} GB")
+        logging.info(f"       Disk size:   {disk_size} GB")
 
     if password is not None:
         cmd.append("--password")
         cmd.append(password)
-        print(f"       Password:    {password}")
+        logging.info(f"       Password:    {password}")
 
     if timezone is not None:
         cmd.append("--timezone")
         cmd.append(timezone)
-        print(f"       Timezone:    {timezone}")
+        logging.info(f"       Timezone:    {timezone}")
 
     cmd.append("--features")
     features = f"nesting={1 if nesting else 0}"
@@ -295,7 +296,7 @@ def create(
 
 
 def start(container_id: int, timeout: int) -> bool:
-    print(f"Starting container {container_id}")
+    logging.info(f"Starting container {container_id}")
 
     subprocess.check_call(
         [
@@ -308,7 +309,7 @@ def start(container_id: int, timeout: int) -> bool:
 
     for i in range(timeout):
         if is_active_service(container_id, "multi-user.target"):
-            print(f"Container {container_id} started after {i} seconds")
+            logging.debug(f"Container {container_id} started after {i} seconds")
             return False
         time.sleep(1)
 
@@ -316,7 +317,7 @@ def start(container_id: int, timeout: int) -> bool:
 
 
 def provision(container_id: int):
-    print(f"Provisioning container {container_id}")
+    logging.info(f"Provisioning container {container_id}")
 
     local_directory = os.path.dirname(
         os.path.abspath(inspect.getfile(inspect.currentframe()))
@@ -351,7 +352,7 @@ def provision(container_id: int):
 
 
 def run(container_id: int, script: str, stage: str):
-    print(f"run: {stage} {script}")
+    logging.debug(f"run: {stage} {script}")
 
     remote_path = path.join("/usr/local/bin", stage)
     subprocess.run(
@@ -372,7 +373,7 @@ def run(container_id: int, script: str, stage: str):
         capture_output=True,
     )
 
-    print(f"Running {stage} stage")
+    logging.info(f"Running {stage} stage")
     subprocess.check_call([PCT_BIN, "exec", str(container_id), remote_path])
 
 
@@ -458,16 +459,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args: argparse.Namespace = parser.parse_args(argv)
 
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s", level=logging.DEBUG
+    )
+
     global PCT_BIN
     PCT_BIN = shutil.which("pct")
     if not PCT_BIN:
-        print("Cannot find the pct tool!")
+        logging.critical("Cannot find the pct tool!")
         return 3
 
     global PVEAM_BIN
     PVEAM_BIN = shutil.which("pveam")
     if not PVEAM_BIN:
-        print("Cannot find the pveam tool!")
+        logging.critical("Cannot find the pveam tool!")
         return 3
 
     # config container ID
@@ -476,7 +481,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif os.getenv(CI_ENV_PREFIX + "CI_JOB_ID"):
         container_id = os.getenv(CI_ENV_PREFIX + "CI_JOB_ID")
     else:
-        print(
+        logging.critical(
             "You must either provide the --id flag or the CUSTOM_ENV_CI_JOB_ID environment variable!"
         )
         return 3
@@ -550,7 +555,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run(container_id, script, stage)
 
     else:
-        print(f"Unknown command:  {args.command}")
+        logging.error(f"Unknown command:  {args.command}")
         return 5
 
     return 0
