@@ -183,6 +183,8 @@ def create(
     password: str | None = None,
     timezone: str = "host",
     nesting: bool = True,
+    mknod: bool = True,
+    fuse: bool = True,
     unprivileged: bool = True,
 ):
     """Creates a new container from an image.
@@ -193,6 +195,8 @@ def create(
     :param bool unprivileged: Makes the container run as unprivileged
         user.
     :param bool nesting: Allow containers access to advanced features.
+    :param bool mknod: Allow containers access to advanced features.
+    :param bool fuse: Allow containers access to advanced features.
     :param str timezone: Time zone to use in the container. Can be set
         to "host" to match the host time zone.
     :param str password: Sets root password inside container.
@@ -280,8 +284,12 @@ def create(
         logging.info(f"       Timezone:    {timezone}")
 
     cmd.append("--features")
-    features = f"nesting={1 if nesting else 0}"
-    cmd.append(features)
+    features = [
+        f"nesting={1 if nesting else 0}",
+        f"mknod={1 if mknod else 0}",
+        f"fuse={1 if fuse else 0}",
+    ]
+    cmd.append(",".join(features))
 
     cmd.append("--unprivileged")
     unprivileged = "1" if unprivileged else "0"

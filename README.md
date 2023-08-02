@@ -4,7 +4,7 @@ Execute [GitLab runner](https://docs.gitlab.com/runner/) jobs inside [Proxmox](h
 
 ## Installation
 
-* Copy `driver.py` and `provisioning.sh` to the Proxmox host.
+* Copy `driver.py` and `provisioning.sh` to the Proxmox host
 * Register and configure the GitLab runner on the Proxmox host
 
 Example configuration in `/etc/gitlab-runner/config.toml`
