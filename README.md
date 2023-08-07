@@ -18,7 +18,7 @@ shutdown_timeout = 0
   session_timeout = 1800
 
 [[runners]]
-  name = "testprodmox-lxc"
+  name = "proxmox-lxc"
   url = "https://gitlab.com/"
   id = 42
   token = "_secret-token"
