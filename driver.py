@@ -500,7 +500,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # command cleanup
     elif args.command == "cleanup":
-        destroy(container_id)
+        skip = os.getenv(CI_ENV_PREFIX + "runner_skip_cleanup")
+        if skip is not None and skip.lower() == "true":
+            print("Skipping container cleanup")
+        else:
+            destroy(container_id)
 
     # command prepare
     elif args.command == "prepare":
