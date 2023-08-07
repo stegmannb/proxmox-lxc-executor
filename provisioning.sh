@@ -14,6 +14,10 @@ if [[ "$ID" == "debian" || "${ID_LIKE:-empty}" == "debian" ]]; then
   export DEBIAN_FRONTEND=noninteractive
   arch=$(dpkg --print-architecture)
 
+  echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+  locale-gen
+  update-locale LANG=en_US.UTF-8
+
   apt-get update
   apt-get install --yes git curl
 
